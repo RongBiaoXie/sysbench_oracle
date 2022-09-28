@@ -111,6 +111,7 @@ sb_arg_t general_args[] =
          "values representing the amount of time in seconds elapsed from start "
          "of test when report checkpoint(s) must be performed. Report "
          "checkpoints are off by default.", "", LIST),
+  SB_OPT("report-real-time", "print real time in report", "off", BOOL),
   SB_OPT("debug", "print more debugging info", "off", BOOL),
   SB_OPT("validate", "perform validation checks where possible", "off", BOOL),
   SB_OPT("help", "print help and exit", "off", BOOL),
@@ -1141,6 +1142,13 @@ static int run_test(sb_test_t *test)
     }
   }
 
+  pthread_mutex_lock(&ora_env_mutex);
+  if (!init_ora_env) {
+    OCIEnvCreate(&ora_env, OCI_THREADED | OCI_OBJECT, NULL, NULL, NULL, NULL,
+                      0, NULL);
+    init_ora_env = true;
+  }
+  pthread_mutex_unlock(&ora_env_mutex);
   if ((err = sb_thread_create_workers(&worker_thread)))
     return err;
 
@@ -1384,6 +1392,7 @@ static int init(void)
   sb_globals.tx_rate = sb_get_value_int("rate");
 
   sb_globals.report_interval = sb_get_value_int("report-interval");
+  sb_globals.report_real_time = sb_get_value_flag("report-real-time");
 
   sb_globals.n_checkpoints = 0;
   checkpoints_list = sb_get_value_list("report-checkpoints");

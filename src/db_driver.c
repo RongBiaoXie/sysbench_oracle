@@ -90,6 +90,10 @@ static sb_arg_t db_args[] =
 
 /* Register available database drivers and command line arguments */
 
+OCIEnv *ora_env;
+bool init_ora_env = false;
+pthread_mutex_t ora_env_mutex;
+
 int db_register(void)
 {
   sb_list_item_t *pos;
@@ -103,6 +107,9 @@ int db_register(void)
 #ifdef USE_PGSQL
   register_driver_pgsql(&drivers);
 #endif
+#ifdef USE_ORACLE
+  register_driver_oracle(&drivers);
+#endif
 
   /* Register command line options for each driver */
   SB_LIST_FOR_EACH(pos, &drivers)
@@ -115,6 +122,8 @@ int db_register(void)
   }
   /* Register general command line arguments for DB API */
   sb_register_arg_set(db_args);
+
+  pthread_mutex_init(&ora_env_mutex, NULL);
 
   return 0;
 }
@@ -814,7 +823,7 @@ void db_done(void)
       pthread_mutex_destroy(&drv->mutex);
     }
   }
-
+  pthread_mutex_destroy(&ora_env_mutex);
   return;
 }
 

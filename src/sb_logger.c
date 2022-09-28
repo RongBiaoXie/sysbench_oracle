@@ -303,6 +303,36 @@ void log_text(log_msg_priority_t priority, const char *fmt, ...)
   log_msg(&msg);
 }
 
+static const int iso8601_size = 33;
+static void make_iso8601_timestamp(char *buf, unsigned long utime) {
+  struct tm my_tm;
+  char tzinfo[8] = "Z";  // max 6 chars plus \0
+  size_t len;
+  time_t seconds;
+
+  seconds = utime / 1000000;
+  utime = utime % 1000000;
+
+  gmtime_r(&seconds, &my_tm);
+
+  len = snprintf(buf, iso8601_size, "%04d-%02d-%02dT%02d:%02d:%02d.%06lu%s",
+                 my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday,
+                 my_tm.tm_hour, my_tm.tm_min, my_tm.tm_sec,
+                 (unsigned long)utime, tzinfo);
+
+}
+
+unsigned long log_micro_time() {
+  unsigned long newtime;
+  struct timeval t;
+  /*
+  The following loop is here because gettimeofday may fail on some systems
+  */
+  while (gettimeofday(&t, NULL) != 0) {
+  }
+  newtime = (unsigned long)t.tv_sec * 1000000 + t.tv_usec;
+  return newtime;
+}
 
 /*
   variant of log_text() which prepends log lines with the elapsed time of a
@@ -318,6 +348,7 @@ void log_timestamp(log_msg_priority_t priority, double seconds,
   char           buf[TEXT_BUFFER_SIZE];
   va_list        ap;
   int            n, clen, maxlen;
+  char           local_time_buff[iso8601_size];
 
   maxlen = TEXT_BUFFER_SIZE;
   clen = 0;
@@ -325,6 +356,14 @@ void log_timestamp(log_msg_priority_t priority, double seconds,
   n = snprintf(buf, maxlen, "[ %.0fs ] ", seconds);
   clen += n;
   maxlen -= n;
+
+  if (sb_globals.report_real_time) {
+    unsigned long now = log_micro_time();
+    make_iso8601_timestamp(local_time_buff, now);
+    n = snprintf(buf + clen, maxlen, "[ %s ] ", local_time_buff);
+    clen += n;
+    maxlen -= n;
+  }
 
   va_start(ap, fmt);
   n = vsnprintf(buf + clen, maxlen, fmt, ap);

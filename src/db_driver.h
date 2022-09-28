@@ -28,6 +28,12 @@
 #include "sb_histogram.h"
 #include "sb_counter.h"
 
+#include <oci.h>
+
+extern OCIEnv *ora_env;
+extern bool init_ora_env;
+extern pthread_mutex_t ora_env_mutex;
+
 /* Prepared statements usage modes */
 
 typedef enum
@@ -339,6 +345,10 @@ int register_driver_mysql(sb_list_t *);
 
 #ifdef USE_PGSQL
 int register_driver_pgsql(sb_list_t *);
+#endif
+
+#ifdef USE_ORACLE
+int register_driver_oracle(sb_list_t *);
 #endif
 
 #endif /* DB_DRIVER_H */

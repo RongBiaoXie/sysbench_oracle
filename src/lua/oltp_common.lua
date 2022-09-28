@@ -88,8 +88,13 @@ function cmd_prepare()
    local con = drv:connect()
 
    for i = sysbench.tid % sysbench.opt.threads + 1, sysbench.opt.tables,
-   sysbench.opt.threads do
-     create_table(drv, con, i)
+      sysbench.opt.threads do
+
+      if (drv:name() ~= "oracle") then
+         create_table(drv, con, i)
+      else
+         create_table_for_oracle(drv, con, i)
+      end
    end
 end
 
@@ -238,6 +243,82 @@ CREATE TABLE sbtest%d(
    end
 
    con:bulk_insert_done()
+
+   if sysbench.opt.create_secondary then
+      print(string.format("Creating a secondary index on 'sbtest%d'...",
+                          table_num))
+      con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
+                              table_num, table_num))
+   end
+end
+
+-- con::query is too slow for Oracle database, we should use prepared statement
+function create_table_for_oracle(drv, con, table_num)
+   local id_index_def, id_def
+   local engine_def = ""
+   local extra_table_options = ""
+   local query
+
+   if sysbench.opt.secondary then
+     id_index_def = "KEY xid"
+   else
+     id_index_def = "PRIMARY KEY"
+   end
+
+   id_def = "INTEGER NOT NULL"
+
+   print(string.format("Creating table 'sbtest%d'...", table_num))
+
+   query = string.format([[
+CREATE TABLE sbtest%d(
+  id %s,
+  k INTEGER DEFAULT '0' NOT NULL,
+  c CHAR(120) DEFAULT '' NOT NULL,
+  pad CHAR(60) DEFAULT '' NOT NULL,
+  %s (id)
+) %s %s]],
+      table_num, id_def, id_index_def, engine_def,
+      sysbench.opt.create_table_options)
+
+   con:query(query)
+
+  -- Simulate auto inc for Oracle
+   print(string.format("Creating sequence 'sbtest%d_seq'...", table_num))
+   con:query("CREATE SEQUENCE sbtest" .. table_num .. "_seq")
+   con:query([[CREATE TRIGGER sbtest]] .. table_num .. [[_trig BEFORE INSERT ON sbtest]] .. table_num .. [[
+               FOR EACH ROW BEGIN SELECT sbtest]] .. table_num .. [[_seq.nextval INTO :new.id FROM DUAL; END;]])
+
+   if (sysbench.opt.table_size > 0) then
+      print(string.format("Inserting %d records into 'sbtest%d'",
+                          sysbench.opt.table_size, table_num))
+   end
+
+   query = "INSERT ALL "
+   local c_val
+   local pad_val
+
+   for i = 1, sysbench.opt.table_size do
+      c_val = get_c_value()
+      pad_val = get_pad_value()
+
+      query = query .. " INTO sbtest" .. table_num .. "(k, c, pad) VALUES(" .. sysbench.rand.default(1, sysbench.opt.table_size) ..", '".. c_val .."', '" .. pad_val .. "')"
+
+      -- commit every 1k rows
+      if i % 100 == 0 then
+         query = query .. " select * from dual"
+         con:query("BEGIN")
+         con:query(query)
+         con:query("COMMIT")
+         query = "INSERT ALL "
+      end
+   end
+
+   if sysbench.opt.table_size % 100 > 0 then
+      query = query .. " select * from dual"
+      con:query("BEGIN")
+      con:query(query)
+      con:query("COMMIT")
+   end
 
    if sysbench.opt.create_secondary then
       print(string.format("Creating a secondary index on 'sbtest%d'...",
@@ -396,7 +477,13 @@ function cleanup()
 
    for i = 1, sysbench.opt.tables do
       print(string.format("Dropping table 'sbtest%d'...", i))
-      con:query("DROP TABLE IF EXISTS sbtest" .. i )
+      if (drv:name() ~= "oracle") then
+         con:query("DROP TABLE IF EXISTS sbtest" .. i )
+      else
+         con:query("DROP TABLE sbtest" .. i )
+         print(string.format("Dropping sequence 'sbtest%d_seq'...", i))
+         con:query("DROP SEQUENCE sbtest" .. i .. "_seq");
+      end
    end
 end
 

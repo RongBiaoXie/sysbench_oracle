@@ -1,3 +1,35 @@
+**Sysbench for testing Oracle**
+
+fork from https://github.com/akopytov/sysbench and https://github.com/fungo/sysbench/tree/fix_oracle
+
+some updates:
+
+1. fix oracle driver errors to call OCIEnvCreate() on main thread instead of in subthreads. 
+
+### install steps:
+
+1. downloal and install oracle libraries:
+
+```
+rpm -ivh --nodeps --force oracle-instantclient11.2-basic-11.2.0.4.0-1.x86_64.rpm
+rpm -ivh --nodeps --force oracle-instantclient11.2-devel-11.2.0.4.0-1.x86_64.rpm
+```
+
+2. configure
+```
+./configure --prefix=/home/ec2-user/xrb/sysbench/build --with-oracle=/usr/lib/oracle/11.2/client64 --without-mysql --includedir=/usr/include/oracle/11.2/client64
+```
+3. install
+```
+make && make install
+```
+4. go go go
+```
+build/bin/sysbench build/share/sysbench/oltp_read_only.lua --db-driver=oracle --tables=1 --table_size=100000 --oracle-db=... --oracle-user=... --oracle-password=... --threads=32 --time=100 --report-interval=1 prepare
+
+build/bin/sysbench build/share/sysbench/oltp_read_only.lua --db-driver=oracle --tables=1 --table_size=100000 --oracle-db=... --oracle-user=... --oracle-password=... --threads=32 --time=100 --report-interval=1 run
+```
+
 [![Latest Release][release-badge]][release-url]
 [![Build Status][travis-badge]][travis-url]
 [![Debian Packages][deb-badge]][deb-url]
